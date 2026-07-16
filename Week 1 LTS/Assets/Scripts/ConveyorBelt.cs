@@ -33,4 +33,20 @@ public class ConveyorBelt : MonoBehaviour
         Rigidbody rb = collision.rigidbody;
         if (rb != null) onBelt.Remove(rb);
     }
+
+    // --- XR support ---
+    // Called by ItemXRGrabHandler when a VR controller grabs an item.
+    // The grab uses XRGrabInteractable's Velocity Tracking mode, so the
+    // Rigidbody stays fully physics-driven (not kinematic) while held. But if
+    // the item is grabbed before it physically leaves the belt's collider,
+    // this script's FixedUpdate and the grab's hand-following would both try
+    // to control its velocity at once, causing jitter. Removing it from
+    // onBelt immediately on grab avoids that conflict instead of waiting for
+    // OnCollisionExit to fire naturally.
+    public bool IsOnBelt(Rigidbody rb) => rb != null && onBelt.Contains(rb);
+
+    public void RemoveFromBelt(Rigidbody rb)
+    {
+        if (rb != null) onBelt.Remove(rb);
+    }
 }

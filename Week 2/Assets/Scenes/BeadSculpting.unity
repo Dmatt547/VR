@@ -927,7 +927,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: b77e618e52787074daba41148897cf52, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1005,9 +1005,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   beadPrefab: {fileID: 5388115903853283642, guid: 513a308aa85dd1e4c8270468d65398c3, type: 3}
   firePoint: {fileID: 2140781658}
-  fireForce: 15
+  fireForce: 15.1
   fireRate: 0.15
-  gunColourIndicator: {fileID: 0}
+  gunColourIndicator: {fileID: 168347918}
   currentColour: {r: 1, g: 0, b: 0, a: 1}
 --- !u!114 &1633660605
 MonoBehaviour:
@@ -1169,7 +1169,7 @@ Transform:
   m_GameObject: {fileID: 1633660603}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.13, y: 1.4, z: 3.95}
+  m_LocalPosition: {x: -2.13, y: 1.4, z: 7.57}
   m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1291,7 +1291,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: b2a3bf30606da59479430928ae836547, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1550,7 +1550,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: 53f57f080827652438417cc5ed19b7e1, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1588,14 +1588,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1832713639}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -4.1787233, y: 3.19, z: -0.42}
-  m_LocalScale: {x: 5.5432, y: 4.112334, z: 0.14408188}
+  m_LocalRotation: {x: -0, y: 0.44789812, z: -0, w: 0.8940846}
+  m_LocalPosition: {x: -4.86, y: 3.19, z: 3.98}
+  m_LocalScale: {x: 5.5432, y: 4.112334, z: 0.11132631}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1683239119}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 53.218, z: 0}
 --- !u!1001 &1936668443
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1777,7 +1777,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: ab6d517efea94bf4ea0510a5455dda1d, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

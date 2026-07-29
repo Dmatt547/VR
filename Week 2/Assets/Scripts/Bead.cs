@@ -1,41 +1,57 @@
 using UnityEngine;
 
-// Attach this to the Bead prefab, alongside a Rigidbody and Collider.
-[RequireComponent(typeof(Rigidbody))]
+// This script goes on the Bead prefab. It caches the bead's Rigidbody and
+// Renderer in Awake() so we don't need to call GetComponent() every time we
+// need them, then uses them to freeze the bead in place and change its colour.
 public class Bead : MonoBehaviour
 {
-    [Tooltip("Tag used on the blocking plane object.")]
+    [Tooltip("The tag used on the Blocking Plane object, so we know what to freeze against.")]
     [SerializeField] private string blockerTag = "Blocker";
 
-    private Rigidbody _rb;
-    private Renderer _renderer;
-    private bool _frozen;
+    private Rigidbody beadRigidbody;
+    private Renderer beadRenderer;
+    private bool hasFrozen = false;
 
     private void Awake()
     {
-        _rb = GetComponent<Rigidbody>();
-        _renderer = GetComponentInChildren<Renderer>();
+        beadRigidbody = GetComponent<Rigidbody>();
+        beadRenderer = GetComponent<Renderer>();
     }
 
-    // Called by BeadGun right after it instantiates this bead.
+    // Called by BeadGun straight after Instantiate(), so the bead is the
+    // correct colour before it starts moving.
     public void SetColour(Color colour)
     {
-        if (_renderer != null)
-            _renderer.material.color = colour; // .material (not .sharedMaterial) creates a per-instance copy.
+        if (beadRenderer != null)
+        {
+            // Accessing .material (rather than .sharedMaterial) creates a copy of the
+            // material just for this bead, so recolouring one bead doesn't recolour
+            // every other bead that uses the same material asset.
+            beadRenderer.material.color = colour;
+        }
     }
 
+    // Unity calls OnCollisionEnter automatically whenever this object's collider
+    // hits another (non-trigger) collider - the same collider-based interaction
+    // concept used in the Week 1 workshop script.
     private void OnCollisionEnter(Collision collision)
     {
-        if (_frozen) return;
+        if (hasFrozen) return;
+
         if (collision.collider.CompareTag(blockerTag))
-            Freeze();
+        {
+            FreezeInPlace();
+        }
     }
 
-    private void Freeze()
+    // Stops the bead from moving any further, so it "sticks" wherever it lands
+    // on the blocking plane, rather than sliding or bouncing away.
+    private void FreezeInPlace()
     {
-        _frozen = true;
-        _rb.linearVelocity = Vector3.zero; // Unity 6: Rigidbody.velocity was renamed to linearVelocity.
-        _rb.angularVelocity = Vector3.zero;
-        _rb.isKinematic = true;
+        hasFrozen = true;
+
+        beadRigidbody.linearVelocity = Vector3.zero;  // Unity 6 renamed Rigidbody.velocity to linearVelocity
+        beadRigidbody.angularVelocity = Vector3.zero;
+        beadRigidbody.isKinematic = true;              // Kinematic Rigidbodies ignore all physics forces
     }
 }

@@ -7,64 +7,47 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 [RequireComponent(typeof(XRGrabInteractable))]
 public class FlightMarker : MonoBehaviour
 {
-    [Header("Appearance")]
-    [SerializeField] private Renderer markerRenderer;
-    [SerializeField] private Color idleColour = new Color(1f, 1f, 1f, 0.35f);
     [SerializeField] private Color heldColour = new Color(1f, 1f, 0f, 0.6f);
 
     private XRGrabInteractable grabInteractable;
-    private bool isHeld = false;
+    private Renderer markerRenderer;
+    private Color idleColour;
 
-    // the aircraft reads this so it doesn't chase a marker the user is still moving
-    public bool IsHeld => isHeld;
+    // the aircraft reads this so it doesn't chase a marker the user is moving
+    public bool IsHeld { get; private set; }
 
     private void Awake()
     {
         grabInteractable = GetComponent<XRGrabInteractable>();
+        markerRenderer = GetComponent<Renderer>();
 
-        if (markerRenderer == null)
-        {
-            markerRenderer = GetComponent<Renderer>();
-        }
-
-        SetColour(idleColour);
+        // take the idle colour from the material, so the material controls
+        // how the marker looks and the script only overrides it while held
+        idleColour = markerRenderer.material.color;
     }
 
-    // same pattern as the bead gun - listen to the grab interactable's events
-    // instead of polling the controller for input every frame
+    // listen to the grab interactable's events instead of polling for input
     private void OnEnable()
     {
-        if (grabInteractable == null) return;
-
         grabInteractable.selectEntered.AddListener(OnGrabbed);
         grabInteractable.selectExited.AddListener(OnReleased);
     }
 
     private void OnDisable()
     {
-        if (grabInteractable == null) return;
-
         grabInteractable.selectEntered.RemoveListener(OnGrabbed);
         grabInteractable.selectExited.RemoveListener(OnReleased);
     }
 
     private void OnGrabbed(SelectEnterEventArgs args)
     {
-        isHeld = true;
-        SetColour(heldColour);
+        IsHeld = true;
+        markerRenderer.material.color = heldColour;
     }
 
     private void OnReleased(SelectExitEventArgs args)
     {
-        isHeld = false;
-        SetColour(idleColour);
-    }
-
-    private void SetColour(Color colour)
-    {
-        if (markerRenderer != null)
-        {
-            markerRenderer.material.color = colour;
-        }
+        IsHeld = false;
+        markerRenderer.material.color = idleColour;
     }
 }

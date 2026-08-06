@@ -48,7 +48,7 @@ Build this before the manager, since the manager needs to reference it.
 2. Add Component → **Rigidbody** → tick **Is Kinematic**, untick **Use Gravity**.
 3. On the Box Collider → tick **Is Trigger**.
 4. Add Component → **Aircraft** (the script).
-   - Speed `0.5`, Turn Speed `180`, Arrive Distance `0.05`, Loop Route ticked
+   - Speed `3`, Turn Speed `90`, Arrive Distance `0.4`
    - Flash Duration `1`, Collision Colour red, Terrain Tag `Terrain`
 5. Drag into `Assets/Prefabs`, delete from the scene.
 
@@ -57,23 +57,18 @@ Build this before the manager, since the manager needs to reference it.
 ## (e cont.) Aircraft manager prefab
 
 1. `GameObject > Create Empty`, rename to **Aircraft Manager**.
-2. Add Component → **Line Renderer** (this draws the sketched path).
-   - Width `0.005` (both ends)
-   - Materials → Element 0 → assign a simple **Unlit** material, or create one: `Create > Material`, Shader → `Universal Render Pipeline/Unlit`. Without a material the line renders bright magenta.
-   - Untick **Use World Space**? — **no, leave it ticked** (the default). The script feeds it world positions.
-3. Add Component → **AircraftManager** (the script). Wire the Inspector:
+2. Add Component → **AircraftManager** (the script). Wire the Inspector:
 
    | Field | Value |
    |---|---|
    | Marker Prefab | `Flight Marker` prefab |
    | Number Of Markers | `5` |
-   | Marker Spacing | `0.6` |
+   | Marker Spacing | `3` |
    | Route Direction | `0, 0, 1` |
    | Aircraft Prefab | `Aircraft` prefab |
    | Route Colour | anything (the spawner overrides it) |
-   | Path Line | drag this object's own Line Renderer in |
 
-4. Drag into `Assets/Prefabs`, then **delete it from the scene** — the spawner creates them.
+3. Drag into `Assets/Prefabs`, then **delete it from the scene** — the spawner creates them.
 
 ## (g) Aircraft spawner
 
@@ -81,7 +76,7 @@ Build this before the manager, since the manager needs to reference it.
 2. Add Component → **AircraftSpawner**.
    - Aircraft Manager Prefab → the `Aircraft Manager` prefab
    - Number Of Routes `4`
-   - Area Size `2`, Min Height `0.3`, Max Height `0.9`
+   - Area Size `12`, Min Height `5`, Max Height `8`
    - Route Colours → leave the four defaults
 
 That's it — press Play and you get four routes, each with its own colour, heading and aircraft.
@@ -112,15 +107,14 @@ What to check:
 AircraftSpawner
   └─ instantiates N × AircraftManager (sets each one's direction + colour)
         ├─ instantiates M × Flight Marker  (grabbable waypoints, straight line)
-        ├─ instantiates 1 × Aircraft       (calls SetRoute(this))
-        └─ Update() → redraws the LineRenderer through the markers
+        └─ instantiates 1 × Aircraft       (calls SetRoute(this))
 
 Aircraft.Update()
   ├─ asks the route: IsMarkerHeld(i)?  → pause if the user is dragging it
   ├─ asks the route: GetMarkerPosition(i)
   ├─ Vector3.MoveTowards  (speed * Time.deltaTime)
   ├─ Quaternion.LookRotation + RotateTowards  (bonus: face direction of travel)
-  └─ within arriveDistance → next marker (wraps to 0 if looping)
+  └─ within arriveDistance → (i + 1) % MarkerCount
 
 Aircraft.OnTriggerEnter(other)
   ├─ other is an Aircraft → FlashCollision()

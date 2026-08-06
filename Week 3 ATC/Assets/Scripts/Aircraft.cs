@@ -1,23 +1,18 @@
 using UnityEngine;
 
 // goes on the aircraft prefab
-// flies through its route's markers in turn, turns to face where it's going,
+// flies through its route's markers in turn, faces the direction of travel,
 // and flashes red when it hits another aircraft or the terrain.
 //
-// the collider on this prefab has "Is Trigger" ticked and the Rigidbody is
-// kinematic, so the aircraft passes straight through things (no physics
-// bounce) but still reports the collision through OnTriggerEnter.
+// the collider has "Is Trigger" ticked and the Rigidbody is kinematic, so the
+// aircraft passes through things instead of bouncing off them, but still
+// reports the contact through OnTriggerEnter
 public class Aircraft : MonoBehaviour
 {
     [Header("Flight")]
-    [SerializeField] private float speed = 0.5f;
-    [SerializeField] private float turnSpeed = 180f;
-    [SerializeField] private float arriveDistance = 0.05f;
-    [SerializeField] private bool loopRoute = true;
-
-    [Header("Appearance")]
-    [SerializeField] private Renderer aircraftRenderer;
-    [SerializeField] private Color normalColour = Color.white;
+    [SerializeField] private float speed = 3f;
+    [SerializeField] private float turnSpeed = 90f;
+    [SerializeField] private float arriveDistance = 0.4f;
 
     [Header("Collision Response")]
     [SerializeField] private Color collisionColour = Color.red;
@@ -25,102 +20,66 @@ public class Aircraft : MonoBehaviour
     [SerializeField] private string terrainTag = "Terrain";
 
     private AircraftManager route;
+    private Renderer aircraftRenderer;
+    private Color normalColour;
     private int targetMarkerIndex = 0;
     private bool isFlashing = false;
 
     private void Awake()
     {
-        if (aircraftRenderer == null)
-        {
-            aircraftRenderer = GetComponentInChildren<Renderer>();
-        }
+        aircraftRenderer = GetComponent<Renderer>();
     }
 
     // called by AircraftManager right after it spawns this aircraft
     public void SetRoute(AircraftManager newRoute)
     {
         route = newRoute;
-        targetMarkerIndex = 0;
-
-        if (route != null)
-        {
-            normalColour = route.RouteColour;
-        }
-
-        SetColour(normalColour);
+        normalColour = route.RouteColour;
+        aircraftRenderer.material.color = normalColour;
     }
 
     private void Update()
     {
-        if (route == null || route.MarkerCount == 0) return;
+        if (route == null) return;
 
         // wait rather than chase a marker the user is currently holding
         if (route.IsMarkerHeld(targetMarkerIndex)) return;
 
         Vector3 targetPosition = route.GetMarkerPosition(targetMarkerIndex);
 
-        MoveTowardsTarget(targetPosition);
+        // the Time.deltaTime * speed pattern from the lectures - speed is in
+        // metres per second, so the flight looks the same at any frame rate
+        transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.deltaTime);
+
         TurnTowardsTarget(targetPosition);
 
+        // arrived, so aim at the next marker - the modulo wraps back to the
+        // first marker at the end of the route
         if (Vector3.Distance(transform.position, targetPosition) <= arriveDistance)
         {
-            AdvanceToNextMarker();
+            targetMarkerIndex = (targetMarkerIndex + 1) % route.MarkerCount;
         }
     }
 
-    // the Time.deltaTime * speed pattern from the lectures - speed is in
-    // metres per second, so the aircraft flies at the same rate regardless
-    // of frame rate
-    private void MoveTowardsTarget(Vector3 targetPosition)
-    {
-        transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.deltaTime);
-    }
-
     // bonus challenge: always face the direction of travel.
-    // LookRotation builds the quaternion pointing down the travel vector, and
-    // RotateTowards eases into it so the aircraft banks around rather than
-    // snapping to the new heading
+    // LookRotation builds the rotation pointing down the travel vector, and
+    // RotateTowards eases into it so the aircraft turns rather than snapping
     private void TurnTowardsTarget(Vector3 targetPosition)
     {
         Vector3 travelDirection = targetPosition - transform.position;
 
-        if (travelDirection.sqrMagnitude < 0.0001f) return;
+        if (travelDirection == Vector3.zero) return;
 
-        Quaternion targetRotation = Quaternion.LookRotation(travelDirection, Vector3.up);
+        Quaternion targetRotation = Quaternion.LookRotation(travelDirection);
         transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
     }
 
-    private void AdvanceToNextMarker()
-    {
-        targetMarkerIndex++;
-
-        if (targetMarkerIndex >= route.MarkerCount)
-        {
-            if (loopRoute)
-            {
-                targetMarkerIndex = 0;
-            }
-            else
-            {
-                targetMarkerIndex = route.MarkerCount - 1;
-            }
-        }
-    }
-
-    // triggers instead of collisions, so two aircraft can occupy the same
-    // space and simply report the conflict rather than knocking each other
-    // off their routes
     private void OnTriggerEnter(Collider other)
     {
-        Aircraft otherAircraft = other.GetComponentInParent<Aircraft>();
+        bool hitAircraft = other.GetComponent<Aircraft>() != null;
+        bool hitTerrain = other.CompareTag(terrainTag);
 
-        if (otherAircraft != null && otherAircraft != this)
-        {
-            FlashCollision();
-            return;
-        }
-
-        if (other.CompareTag(terrainTag))
+        if (hitAircraft || hitTerrain)
         {
             FlashCollision();
         }
@@ -129,25 +88,16 @@ public class Aircraft : MonoBehaviour
     // same async pattern as the bead gun's fire rate limit
     private async void FlashCollision()
     {
+        // ignore new collisions while already flashing, so overlapping hits
+        // don't cut the flash short
         if (isFlashing) return;
 
         isFlashing = true;
-        SetColour(collisionColour);
+        aircraftRenderer.material.color = collisionColour;
 
         await Awaitable.WaitForSecondsAsync(flashDuration);
 
-        // the aircraft may have been destroyed while we were waiting
-        if (this == null) return;
-
-        SetColour(normalColour);
+        aircraftRenderer.material.color = normalColour;
         isFlashing = false;
-    }
-
-    private void SetColour(Color colour)
-    {
-        if (aircraftRenderer != null)
-        {
-            aircraftRenderer.material.color = colour;
-        }
     }
 }

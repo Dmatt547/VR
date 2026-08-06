@@ -6,6 +6,7 @@ TagManager:
   tags:
   - BeadGun
   - Blocker
+  - Terrain
   layers:
   - Default
   - TransparentFX

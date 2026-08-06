@@ -67,6 +67,6 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "Week 2.slnx",
+    "dotnet.defaultSolution": "Week 3 ATC.slnx",
     "dotnet.enableWorkspaceBasedDevelopment": false
 }

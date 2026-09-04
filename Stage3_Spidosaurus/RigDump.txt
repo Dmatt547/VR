@@ -1,0 +1,92 @@
+Rig dump for 'SpidosaurBones'
+bones: 89   junctions (2+ children): 10   tips: 23
+------------------------------------------------------------
+SpidosaurBones    <<<< JUNCTION (14 children)
+  Bone
+    Bone.001
+      Bone.002    <<<< JUNCTION (2 children)
+        Bone.003
+          Bone.004
+            Bone.004_end    [tip]
+        Bone.005
+          Bone.006
+            Bone.006_end    [tip]
+  Bone.007
+    Bone.007_end    [tip]
+  Bone.008
+    Bone.009
+      Bone.010
+        Bone.011    <<<< JUNCTION (2 children)
+          Bone.012
+            Bone.012_end    [tip]
+          Bone.013
+            Bone.013_end    [tip]
+  Bone.014
+    Bone.015
+      Bone.016
+        Bone.016_end    [tip]
+  Bone.017
+    Bone.018    <<<< JUNCTION (2 children)
+      Bone.019
+        Bone.020    <<<< JUNCTION (2 children)
+          Bone.021
+            Bone.021_end    [tip]
+          Bone.022
+            Bone.022_end    [tip]
+      Bone.023
+        Bone.024
+          Bone.024_end    [tip]
+  Bone.025    <<<< JUNCTION (2 children)
+    Bone.026
+      Bone.026_end    [tip]
+    Bone.027    <<<< JUNCTION (2 children)
+      Bone.028
+        Bone.029
+          Bone.029_end    [tip]
+      Bone.030
+        Bone.031
+          Bone.031_end    [tip]
+  Bone.032
+    Bone.033
+      Bone.034
+        Bone.035
+          Bone.035_end    [tip]
+  Bone.036
+    Bone.037
+      Bone.038    <<<< JUNCTION (2 children)
+        Bone.039
+          Bone.039_end    [tip]
+        Bone.040
+          Bone.040_end    [tip]
+  Bone.049
+    Bone.057
+      Bone.065
+        Bone.073
+          Bone.073_end    [tip]
+  Bone.086
+    Bone.102
+      Bone.118    <<<< JUNCTION (2 children)
+        Bone.134
+          Bone.134_end    [tip]
+        Bone.150
+          Bone.150_end    [tip]
+  Bone.182
+    Bone.214
+      Bone.246    <<<< JUNCTION (2 children)
+        Bone.278
+          Bone.278_end    [tip]
+        Bone.310
+          Bone.310_end    [tip]
+  Bone.374
+    Bone.438
+      Bone.502
+        Bone.566
+          Bone.566_end    [tip]
+  Bone.694
+    Bone.822
+      Bone.950
+        Bone.1078
+          Bone.1078_end    [tip]
+  Bone.1334
+    Bone.1590
+      Bone.1590_end    [tip]

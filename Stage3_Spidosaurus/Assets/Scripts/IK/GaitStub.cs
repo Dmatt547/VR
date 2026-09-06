@@ -1,20 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Stands in for the gait and footprint planner of Karim et al. (2013), which is out of scope
-/// for this stage. It does three jobs the solver depends on:
-///   1. decides which feet are planted, and eases the weight so it never steps
-///   2. plans footholds in BODY-LOCAL space with velocity lead, so a stationary creature does
-///      not walk its own feet away from itself
-///   3. reserves ground: a lifted foot may not plan a foothold inside a sibling's plant radius
-///
-/// Each foot has a "home" position recorded in the body's local space at Start. A foot steps
-/// only once it has drifted further than stepTrigger from that home, and it steps back to
-/// home plus a short lead along the body's current velocity. This is the predictive placement
-/// idea from Roche and Torres-Cros (2016): plan where the foot should be, rather than react
-/// to where it has ended up.
-/// </summary>
+// Unit material this builds on: local vs world space and TransformPoint/InverseTransformPoint
+// (Week 3); ground detection with Physics.Raycast and its RaycastHit point (Week 5); the
+// periodic function y = A sin(fx) driving the swing arc, with the step phase as x (Week 4);
+// and frame-rate independent motion through Time.deltaTime (Week 2).
+
 [DefaultExecutionOrder(100)]
 public class GaitStub : MonoBehaviour
 {
@@ -71,9 +62,15 @@ public class GaitStub : MonoBehaviour
 
     Vector3[] homeLocal;
     Vector3   lastBodyPos, bodyVelocity;
-    int       swing = -1;          // -1 = every foot planted
+    int       swing = -1;
     float     t;
     Vector3   from, to;
+
+    bool Stepping => swing >= 0;
+
+    // Frame-rate independent exponential approach, shared by the velocity filter and the
+    // in-flight re-aim.
+    static float Ease(float rate, float dt) => 1f - Mathf.Exp(-rate * dt);
 
     void Start()
     {
@@ -83,20 +80,17 @@ public class GaitStub : MonoBehaviour
 
         for (int i = 0; i < feet.Count; i++)
         {
-            var f = feet[i];
+            var foot = feet[i];
 
-            // Start the goal exactly where the foot already is, then drop it to the ground.
-            // Without this the target keeps whatever position the empty was created at.
-            if (snapTargetsToBonesOnStart && f.tipBone != null)
-                f.target.position = f.tipBone.position;
+            if (snapTargetsToBonesOnStart && foot.tipBone != null)
+                foot.target.position = foot.tipBone.position;
 
-            f.contactPoint    = Ground(f.target.position);
-            f.target.position = f.contactPoint;
-            f.isPlanted       = true;
-            f.plantBlend      = 1f;
+            foot.contactPoint    = SnapToGround(foot.target.position, foot);
+            foot.target.position = foot.contactPoint;
+            foot.isPlanted       = true;
+            foot.plantBlend      = 1f;
 
-            // Where this foot belongs, expressed in the body's frame. Travels with the body.
-            homeLocal[i] = body.InverseTransformPoint(f.contactPoint);
+            homeLocal[i] = body.InverseTransformPoint(foot.contactPoint);
         }
 
         lastBodyPos = body.position;
@@ -106,114 +100,110 @@ public class GaitStub : MonoBehaviour
     {
         float dt = Mathf.Max(Time.deltaTime, 1e-5f);
 
-        // Horizontal only. BodyGrounder smooths the body's height every frame, so vertical
-        // velocity is mostly settling noise; feeding it into the prediction makes footholds
-        // bob up and down. Smoothed, because raw per-frame velocity is jittery.
+        // Horizontal only: the body's height is smoothed every frame elsewhere, so vertical
+        // velocity is settling noise that would make footholds bob.
         Vector3 raw = (body.position - lastBodyPos) / dt;
         raw.y = 0f;
-        bodyVelocity = Vector3.Lerp(bodyVelocity, raw,
-                                    1f - Mathf.Exp(-velocitySmoothing * dt));
-        lastBodyPos = body.position;
 
-        if (swing >= 0) AdvanceSwing();
-        else            ConsiderNextStep();
+        bodyVelocity = Vector3.Lerp(bodyVelocity, raw, Ease(velocitySmoothing, dt));
+        lastBodyPos  = body.position;
 
-        // ease every weight so the junction never jumps when contact state changes
-        foreach (var f in feet)
-            f.plantBlend = Mathf.MoveTowards(
-                f.plantBlend,
-                f.isPlanted ? 1f : 0f,
-                Time.deltaTime / Mathf.Max(0.01f, blendTime));
+        if (Stepping) UpdateSwing();
+        else          ChooseNextStep();
+
+        // Easing the weight is what stops the junction jumping when contact state changes.
+        float blendStep = Time.deltaTime / Mathf.Max(0.01f, blendTime);
+        foreach (var foot in feet)
+            foot.plantBlend = Mathf.MoveTowards(foot.plantBlend, foot.isPlanted ? 1f : 0f, blendStep);
     }
 
-    void AdvanceSwing()
+    // ---- stepping ----------------------------------------------------------
+
+    // One foot swings at a time, which guarantees the planted/lifted contrast the solver relies
+    // on. Drift is measured against the planned landing spot rather than the ideal home: home is
+    // not reachable once the reach clamp and a sibling's claim have moved it, so a foot already
+    // standing on the best available ground would otherwise re-step forever.
+    void ChooseNextStep()
     {
-        var f = feet[swing];
-
-        // The landing spot chosen at take-off is already stale: the body has moved since.
-        // Re-plan it every frame and ease toward the new answer, so the foot lands where the
-        // creature will actually be rather than where it was.
-        to = Vector3.Lerp(to, PlanFoothold(swing),
-                          1f - Mathf.Exp(-landingTrack * Time.deltaTime));
-
-        t += Time.deltaTime / Mathf.Max(0.01f, stepDuration);
-        float k = Mathf.Clamp01(t);
-
-        Vector3 p = Vector3.Lerp(from, to, k);
-        p.y += Mathf.Sin(k * Mathf.PI) * stepHeight;
-
-        // Never let the swing arc pass below the terrain. Lerping between two points across a
-        // ledge cuts a straight line through whatever is in between.
-        float surface = Ground(p).y;
-        if (p.y < surface) p.y = surface;
-
-        f.target.position = p;
-
-        if (t >= 1f)
-        {
-            f.contactPoint    = to;
-            f.target.position = to;
-            f.isPlanted       = true;
-            swing             = -1;
-        }
-    }
-
-    /// <summary>
-    /// One foot swings at a time, which guarantees the planted/lifted contrast the solver is
-    /// built around. The foot that has drifted furthest from its home goes first; if nothing
-    /// has drifted past the trigger, every foot stays planted and the creature simply stands.
-    /// </summary>
-    void ConsiderNextStep()
-    {
-        int   worst  = -1;
-        float worstD = stepTrigger;
+        int   worst      = -1;
+        float worstDrift = stepTrigger;
 
         for (int i = 0; i < feet.Count; i++)
         {
-            float d = Vector3.Distance(feet[i].contactPoint, Home(i));
-            if (d > worstD) { worstD = d; worst = i; }
+            float drift = Vector3.Distance(feet[i].contactPoint, PlanLanding(i));
+            if (drift <= worstDrift) continue;
+
+            worstDrift = drift;
+            worst      = i;
         }
 
-        if (worst >= 0) BeginStep(worst);
+        if (worst >= 0) StartStep(worst);
     }
+
+    void StartStep(int index)
+    {
+        swing = index;
+
+        var foot = feet[swing];
+        foot.isPlanted = false;
+
+        from = foot.target.position;
+        to   = PlanLanding(index);
+        t    = 0f;
+    }
+
+    void UpdateSwing()
+    {
+        var foot = feet[swing];
+        float dt = Time.deltaTime;
+
+        // The body keeps moving after take-off, so the landing spot is re-planned in flight.
+        to = Vector3.Lerp(to, PlanLanding(swing), Ease(landingTrack, dt));
+        t += dt / Mathf.Max(0.01f, stepDuration);
+
+        Vector3 p = SwingArc(Mathf.Clamp01(t));
+
+        // A straight lerp across a ledge cuts through it, so the arc is held above the surface.
+        float surface = SnapToGround(p, foot).y;
+        if (p.y < surface) p.y = surface;
+
+        foot.target.position = p;
+
+        if (t < 1f) return;
+
+        foot.contactPoint    = to;
+        foot.target.position = to;
+        foot.isPlanted       = true;
+        swing                = -1;
+    }
+
+    // Half a sine cycle over the step, so the foot leaves and meets the ground at zero height.
+    Vector3 SwingArc(float k)
+    {
+        Vector3 p = Vector3.Lerp(from, to, k);
+        p.y += Mathf.Sin(k * Mathf.PI) * stepHeight;
+        return p;
+    }
+
+    // ---- planning ----------------------------------------------------------
 
     Vector3 Home(int i) => body.TransformPoint(homeLocal[i]);
 
-    void BeginStep(int index)
+    // Home under the body, led by body velocity, pushed off any sibling's claim, pulled back
+    // inside the leg's reach, then dropped onto the terrain.
+    Vector3 PlanLanding(int index)
     {
-        swing = index;
-        var f = feet[swing];
-        f.isPlanted = false;
-        from = f.target.position;
+        var foot = feet[index];
 
-        // Plan toward where this foot BELONGS under the body, led slightly by body velocity.
-        // Planning relative to the previous contact instead would march the feet away from a
-        // stationary creature, one stride per step, until the reach clamp stopped them.
-        to = PlanFoothold(index);
-        t  = 0f;
-    }
-
-    /// <summary>
-    /// Where foot <paramref name="index"/> should land: its home spot under the body, led by
-    /// the body's velocity, pushed out of any sibling's claimed ground, pulled back inside the
-    /// leg's reach, and dropped onto the terrain. Called every frame while the foot is in
-    /// flight, not just at take-off.
-    /// </summary>
-    Vector3 PlanFoothold(int index)
-    {
-        var f = feet[index];
         Vector3 desired = Home(index) + bodyVelocity * predictTime;
-        desired = Reserve(f, desired);
-        desired = ClampToReach(f, desired);
-        return Ground(desired);
+        desired = AvoidClaims(foot, desired);
+        desired = ClampToLegReach(foot, desired);
+
+        return SnapToGround(desired, foot);
     }
 
-    /// <summary>
-    /// Ground is a shared resource. Reject any candidate foothold inside a sibling's claim
-    /// and push it out to the edge of that claim. This is the planning half of the
-    /// foot-into-sub-foot problem; SeparateSiblings is the solving half.
-    /// </summary>
-    Vector3 Reserve(FootEffector mover, Vector3 desired)
+    // Planning half of the foot-into-sub-foot problem; SeparateSiblings is the solving half.
+    Vector3 AvoidClaims(FootEffector mover, Vector3 desired)
     {
         reservationsThisStep = 0;
 
@@ -226,57 +216,91 @@ public class GaitStub : MonoBehaviour
             if (d.magnitude >= plantRadius) continue;
 
             Vector3 n = d.sqrMagnitude < 1e-6f ? body.right : d.normalized;
+
             desired   = other.contactPoint + n * plantRadius;
             desired.y = mover.contactPoint.y;
             reservationsThisStep++;
         }
+
         return desired;
     }
 
-    /// <summary>
-    /// A leg cannot reach further than the sum of its bone lengths. Planning a foothold past
-    /// that point does not stretch the leg, it just leaves the solver permanently short.
-    /// </summary>
-    Vector3 ClampToReach(FootEffector f, Vector3 desired)
+    // Planning past full extension does not stretch the leg, it just leaves the solver short.
+    Vector3 ClampToLegReach(FootEffector foot, Vector3 desired)
     {
         if (solver == null || solver.rootBone == null) return desired;
 
-        float reach = solver.ReachOf(f) * reachMargin;
-        if (reach <= 0f) return desired;
+        float reach = solver.ReachOf(foot) * reachMargin;
+        if (reach <= 0f) return desired;   // chain not built yet on the first frame
 
         Vector3 hip = solver.rootBone.position;
         Vector3 d   = desired - hip;
-        if (d.magnitude <= reach) return desired;
 
-        return hip + d.normalized * reach;
+        return d.magnitude <= reach ? desired : hip + d.normalized * reach;
     }
 
-    Vector3 Ground(Vector3 near)
+    // R(t) = O + t·d straight down from above the candidate spot, lifted clear of the surface
+    // because the tip bone sits inside the toe mesh.
+    Vector3 SnapToGround(Vector3 near, FootEffector foot = null)
     {
         Vector3 origin = near + Vector3.up * rayHeight;
-        return Physics.Raycast(origin, Vector3.down, out var hit, rayLength, groundMask)
-            ? hit.point + Vector3.up * footClearance
-            : near;
+
+        if (!Physics.Raycast(origin, Vector3.down, out var hit, rayLength, groundMask))
+            return near;
+
+        float lift = footClearance + (foot != null ? foot.footRadius : 0f);
+        return hit.point + Vector3.up * lift;
+    }
+
+    // ---- diagnostics -------------------------------------------------------
+
+    // Run in Play mode when a foot sinks: a collider that is not the slab under the foot means
+    // that slab is off the ground layer and the ray passes straight through it.
+    [ContextMenu("Log Ground Under Each Foot")]
+    void LogGroundUnderFeet()
+    {
+        foreach (var f in feet)
+        {
+            if (f == null || f.tipBone == null) continue;
+
+            Vector3 o = f.tipBone.position + Vector3.up * rayHeight;
+
+            if (!Physics.Raycast(o, Vector3.down, out var hit, rayLength, groundMask))
+            {
+                Debug.LogWarning($"[Gait] {f.name}: ground ray hit NOTHING. " +
+                                 $"Either groundMask excludes the surface below, or rayLength " +
+                                 $"({rayLength} m) is too short.", f);
+                continue;
+            }
+
+            float gap = f.tipBone.position.y - hit.point.y;
+            Debug.Log($"[Gait] {f.name}: hit '{hit.collider.name}' " +
+                      $"(layer {LayerMask.LayerToName(hit.collider.gameObject.layer)}) " +
+                      $"at y={hit.point.y:F3}. Tip bone is {gap * 1000f:F0} mm above it. " +
+                      $"footRadius {f.footRadius:F3} + clearance {footClearance:F3}.",
+                      hit.collider.gameObject);
+        }
     }
 
     void OnDrawGizmosSelected()
     {
         if (feet == null) return;
 
+        bool showHomes = Application.isPlaying && homeLocal != null;
+
         for (int i = 0; i < feet.Count; i++)
         {
-            var f = feet[i];
-            if (f == null) continue;
+            var foot = feet[i];
+            if (foot == null) continue;
 
-            Gizmos.color = f.isPlanted ? Color.green : Color.yellow;
-            Gizmos.DrawWireSphere(f.contactPoint, plantRadius);
+            Gizmos.color = foot.isPlanted ? Color.green : Color.yellow;
+            Gizmos.DrawWireSphere(foot.contactPoint, plantRadius);
 
-            if (Application.isPlaying && homeLocal != null && i < homeLocal.Length)
-            {
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawWireCube(Home(i), Vector3.one * 0.05f);
-                Gizmos.DrawLine(Home(i), f.contactPoint);
-            }
+            if (!showHomes || i >= homeLocal.Length) continue;
+
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireCube(Home(i), Vector3.one * 0.05f);
+            Gizmos.DrawLine(Home(i), foot.contactPoint);
         }
     }
 }

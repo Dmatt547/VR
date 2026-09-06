@@ -25,6 +25,12 @@ public class FootEffector : MonoBehaviour
     [Tooltip("Last confirmed ground contact. Siblings must plan their footholds outside this point.")]
     public Vector3 contactPoint;
 
+    [Header("Shape")]
+    [Tooltip("How far the visible toe extends below the tip bone's origin, in metres. The bone " +
+             "is a line; the foot is geometry wrapped around it, so planting the bone on the " +
+             "surface buries the mesh. Measure this per foot: the toes are not identical.")]
+    public float footRadius = 0.03f;
+
     [Header("Weights")]
     public float plantedWeight = 1.0f;
     public float liftedWeight  = 0.1f;

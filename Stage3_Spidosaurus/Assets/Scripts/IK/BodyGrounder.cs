@@ -76,8 +76,14 @@ public class BodyGrounder : MonoBehaviour
 
         if (keepLevel)
         {
-            Vector3 e = transform.eulerAngles;
-            transform.eulerAngles = new Vector3(0f, e.y, 0f);
+            // NOT via eulerAngles. Reading eulerAngles decomposes the quaternion, and the
+            // decomposition is not unique: (0.8, 55, 9) and (179.2, 125, 171) are the same
+            // orientation. Writing the read-back value can therefore pick a different branch
+            // each frame and jerk the yaw. Flattening the forward vector is idempotent.
+            Vector3 fwd = transform.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude > 1e-6f)
+                transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
         }
     }
 

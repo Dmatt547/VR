@@ -1,111 +1,139 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>One bone in the solve. Plain class, not a component: no per-frame allocation.</summary>
+// Scene-graph driven skeleton for the weighted-junction FABRIK solver.
+// Uses the parent-child Transform relationships covered in Week 2/Week 3 (scene graph,
+// local vs world space, Quaternion rotations) and the direction-vector magnitude work
+// from Week 5/Week 6 to measure bone lengths at bind time.
+
 public class IKJoint
 {
     public Transform bone;
-    public IKJoint   parent;
+    public IKJoint parent;
     public readonly List<IKJoint> children = new List<IKJoint>();
 
-    /// <summary>Rest distance to the parent bone, cached once at bind time.</summary>
+    // Rest length to the parent bone, measured once from world-space positions.
     public float lengthFromParent;
 
-    /// <summary>Working position during the solve. Never written back directly.</summary>
+    // Scratch position for the solve; never written straight back to the Transform.
     public Vector3 position;
 
-    /// <summary>Summed weight of every foot below this joint. Drives the weighted average.</summary>
+    // Combined weight of every foot beneath this joint.
     public float pull;
 
-    /// <summary>
-    /// The bone's local rotation in the imported bind pose. Every frame the bone is reset to
-    /// this before the solved rotation is applied, so error cannot accumulate frame over frame.
-    /// </summary>
+    // Imported local rotation, restored each frame so error cannot accumulate.
     public Quaternion bindLocalRotation;
 
-    /// <summary>Non-null only on tip bones.</summary>
     public FootEffector effector;
 
     public bool IsTip => effector != null;
 }
 
-/// <summary>
-/// Builds a joint tree from Unity's Transform hierarchy, keeping only the bones that
-/// actually lie on a path from the root down to one of the feet. Unity's hierarchy is
-/// already the branching structure this solver needs, so no parallel data structure is built.
-/// </summary>
 public class BranchedChain
 {
     public IKJoint root;
     public readonly List<IKJoint> rootFirst = new List<IKJoint>();
-    public readonly List<IKJoint> tips      = new List<IKJoint>();
+    public readonly List<IKJoint> tips = new List<IKJoint>();
 
     public static BranchedChain Build(Transform rootBone, IList<FootEffector> effectors)
     {
-        var chain  = new BranchedChain();
-        var onPath = new HashSet<Transform>();
+        var chain = new BranchedChain();
+        var feet = MapFeet(effectors);
+        var spine = TraceUpwards(rootBone, feet.Keys);
 
-        // Walk up from every tip to the root, marking bones we care about.
-        foreach (var e in effectors)
-        {
-            if (e == null || e.tipBone == null) continue;
-            var t = e.tipBone;
-            while (t != null)
-            {
-                onPath.Add(t);
-                if (t == rootBone) break;
-                t = t.parent;
-            }
-        }
-
-        chain.root = chain.AddRecursive(rootBone, null, onPath, effectors);
-        chain.Flatten(chain.root);
-        chain.CacheLengths();
+        chain.root = chain.Grow(rootBone, spine, feet);
+        chain.CollectTips();
         return chain;
     }
 
-    IKJoint AddRecursive(Transform bone, IKJoint parent, HashSet<Transform> onPath,
-                         IList<FootEffector> effectors)
-    {
-        var j = new IKJoint { bone = bone, parent = parent };
-        parent?.children.Add(j);
-
-        foreach (var e in effectors)
-            if (e != null && e.tipBone == bone) { j.effector = e; tips.Add(j); }
-
-        if (!j.IsTip)
-            foreach (Transform child in bone)
-                if (onPath.Contains(child))
-                    AddRecursive(child, j, onPath, effectors);
-
-        return j;
-    }
-
-    void Flatten(IKJoint j)
-    {
-        rootFirst.Add(j);
-        foreach (var c in j.children) Flatten(c);
-    }
-
-    /// <summary>
-    /// Total bone length from the root down to one tip. This is the furthest that foot can
-    /// possibly get from the hip, so it is the hard limit on where a foothold may be planned.
-    /// </summary>
+    // Longest possible reach of a foot from the hip, so foothold planning can be clamped.
     public float ReachTo(IKJoint tip)
     {
-        float total = 0f;
-        for (var j = tip; j != null && j.parent != null; j = j.parent)
-            total += j.lengthFromParent;
-        return total;
+        float reach = 0f;
+        var joint = tip;
+
+        while (joint?.parent != null)
+        {
+            reach += joint.lengthFromParent;
+            joint = joint.parent;
+        }
+
+        return reach;
     }
 
-    void CacheLengths()
+    static Dictionary<Transform, FootEffector> MapFeet(IList<FootEffector> effectors)
     {
-        foreach (var j in rootFirst)
+        var feet = new Dictionary<Transform, FootEffector>();
+
+        foreach (var e in effectors)
+            if (e != null && e.tipBone != null)
+                feet[e.tipBone] = e;
+
+        return feet;
+    }
+
+    // Climb from each foot back towards the root, keeping only the bones in between.
+    static HashSet<Transform> TraceUpwards(Transform rootBone, IEnumerable<Transform> feet)
+    {
+        var spine = new HashSet<Transform>();
+
+        foreach (var foot in feet)
         {
-            j.bindLocalRotation = j.bone.localRotation;
-            if (j.parent != null)
-                j.lengthFromParent = Vector3.Distance(j.bone.position, j.parent.bone.position);
+            var bone = foot;
+            while (bone != null && spine.Add(bone) && bone != rootBone)
+                bone = bone.parent;
         }
+
+        return spine;
+    }
+
+    // Iterative pre-order walk, so rootFirst comes out ordered without a second pass.
+    IKJoint Grow(Transform rootBone, HashSet<Transform> spine, Dictionary<Transform, FootEffector> feet)
+    {
+        var start = MakeJoint(rootBone, null, feet);
+        var pending = new Stack<IKJoint>();
+        pending.Push(start);
+
+        while (pending.Count > 0)
+        {
+            var joint = pending.Pop();
+            rootFirst.Add(joint);
+
+            if (joint.IsTip) continue;
+
+            foreach (Transform child in joint.bone)
+                if (spine.Contains(child))
+                    joint.children.Add(MakeJoint(child, joint, feet));
+
+            for (int i = joint.children.Count - 1; i >= 0; i--)
+                pending.Push(joint.children[i]);
+        }
+
+        return start;
+    }
+
+    IKJoint MakeJoint(Transform bone, IKJoint parent, Dictionary<Transform, FootEffector> feet)
+    {
+        var joint = new IKJoint
+        {
+            bone = bone,
+            parent = parent,
+            bindLocalRotation = bone.localRotation
+        };
+
+        if (parent != null)
+            joint.lengthFromParent = (bone.position - parent.bone.position).magnitude;
+
+        if (feet.TryGetValue(bone, out var effector))
+            joint.effector = effector;
+
+        return joint;
+    }
+
+    void CollectTips()
+    {
+        foreach (var joint in rootFirst)
+            if (joint.IsTip)
+                tips.Add(joint);
     }
 }
